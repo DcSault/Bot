@@ -1,4 +1,5 @@
 require('dotenv').config();
+const { saveAvailability, getAvailabilities, getUserAvailabilities } = require('./database');
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const fs = require('fs').promises;
 
@@ -25,10 +26,37 @@ client.once('ready', async () => {
 
 client.on('messageCreate', async message => {
     if (message.content.startsWith('!planning') && !message.author.bot) {
-        const user = message.mentions.users.first() || message.author; // Collecte pour l'utilisateur mentionné ou l'auteur du message
+        const user = message.mentions.users.first() || message.author;
         await collectAvailability(user);
     }
+    // La commande !modifier est désormais traitée via interactionCreate, le code correspondant est donc retiré d'ici.
 });
+
+client.on('interactionCreate', async interaction => {
+    if (!interaction.isCommand()) return;
+
+    if (interaction.commandName === 'modifier') {
+        const jour = interaction.options.getString('jour');
+        const disponibilite = interaction.options.getBoolean('disponibilite');
+        const heure = interaction.options.getString('heure') || '';
+        const userId = interaction.user.id;
+        const username = interaction.user.username;
+
+        // Assurez-vous que le jour est correctement formaté, si nécessaire
+        // Convertir la disponibilité en format attendu par saveAvailability
+        const disponible = disponibilite ? true : false;
+
+        saveAvailability(userId, username, capitalizeFirstLetter(jour), disponible, heure, async () => {
+            await updateSummaryMessage();
+            await interaction.reply(`Votre disponibilité pour ${capitalizeFirstLetter(jour)} a été mise à jour : ${disponible ? '✅ Disponible' : '❌ Non Disponible'} ${heure ? `à ${heure} heures` : ''}`);
+        });
+    }
+});
+
+// Fonction pour capitaliser la première lettre (si nécessaire pour votre implémentation)
+function capitalizeFirstLetter(string) {
+    return string.charAt(0).toUpperCase() + string.slice(1).toLowerCase();
+}
 
 async function collectAvailability(user) {
     planningResponses[user.id] = { username: user.username, disponibilites: {} };
@@ -40,98 +68,122 @@ async function collectAvailability(user) {
 }
 
 async function askAvailability(user, jour) {
-    const dmMessage = await user.send(`Êtes-vous disponible le ${jour}? Réagissez avec ✅ pour oui ou ❌ pour non.`).catch(console.error);
-    if (!dmMessage) return;
+    try {
+        const dmMessage = await user.send(`Êtes-vous disponible le ${jour}? Réagissez avec ✅ pour oui ou ❌ pour non.`);
+        await dmMessage.react('✅');
+        await dmMessage.react('❌');
 
-    const reactions = ['✅', '❌'];
-    for (const reaction of reactions) {
-        await dmMessage.react(reaction);
+        const filter = (reaction, userReact) => {
+            return ['✅', '❌'].includes(reaction.emoji.name) && userReact.id === user.id;
+        };
+
+        const reaction = await waitForReaction(dmMessage, filter, 60000);
+        if (!reaction) {
+            await user.send("Temps écoulé! Veuillez répondre plus rapidement la prochaine fois.");
+            return;
+        }
+
+        const disponible = reaction.emoji.name === '✅';
+        if (disponible) {
+            await askForAvailabilityTime(user, jour);
+        } else {
+            saveAvailability(user.id, user.username, jour, false, '');
+            await user.send(`Votre indisponibilité pour le ${jour} a été enregistrée.`);
+        }
+    } catch (error) {
+        console.error("Erreur lors de l'envoi du message ou de la réaction:", error);
+    }
+}
+
+function waitForReaction(dmMessage, filter, time) {
+    return new Promise(resolve => {
+        const collector = dmMessage.createReactionCollector({ filter, max: 1, time: time });
+
+        collector.on('end', collected => resolve(collected.first()));
+    });
+}
+
+async function askForAvailabilityTime(user, jour) {
+    const requestCommentMsg = await user.send(`Veuillez entrer votre heure de disponibilité pour le ${jour} (ex: "21:00").`);
+
+    const filter = m => m.author.id === user.id;
+    const msg = await waitForMessage(requestCommentMsg.channel, filter, 60000);
+    if (!msg) {
+        await user.send("Temps écoulé pour l'heure de disponibilité. Veuillez recommencer le processus.");
+        return;
     }
 
-    const filter = (reaction, userReact) => reactions.includes(reaction.emoji.name) && userReact.id === user.id;
-    const collector = dmMessage.createReactionCollector({ filter, max: 1, time: 60000 });
+    const commentaire = msg.content.trim() !== '' ? `Disponible à ${msg.content} heures` : 'Disponible';
+    saveAvailability(user.id, user.username, jour, true, commentaire);
+    await user.send(`Votre disponibilité pour le ${jour} à ${commentaire} a été enregistrée.`);
+}
 
+function waitForMessage(channel, filter, time) {
     return new Promise(resolve => {
-        collector.on('collect', async (reaction) => {
-            planningResponses[user.id].disponibilites[jour] = { disponible: reaction.emoji.name === '✅' };
-            if (reaction.emoji.name === '✅') {
-                const requestCommentMsg = await user.send(`Veuillez entrer votre heure de disponibilité pour le ${jour} (ex: "21:00").`).catch(console.error);
-                const commentCollector = requestCommentMsg.channel.createMessageCollector({ time: 60000, max: 1 });
+        const collector = channel.createMessageCollector({ filter, max: 1, time: time });
 
-                commentCollector.on('collect', msg => {
-                    if (msg.content.trim() !== '') {
-                        planningResponses[user.id].disponibilites[jour].commentaire = `Disponible à ${msg.content} heures`;
-                    }
-                    resolve();
-                });
-            } else {
-                resolve();
-            }
-        });
+        collector.on('end', collected => resolve(collected.first()));
     });
 }
 
 async function sendSummaryInDM(userId) {
-    const user = await client.users.fetch(userId);
-    const disponibilites = planningResponses[userId].disponibilites;
-    const embed = new EmbedBuilder()
-        .setTitle('Résumé de vos disponibilités')
-        .setDescription('Voici un résumé de vos disponibilités que vous avez indiquées :')
-        .setColor(0xFFA500)
-        .setThumbnail('https://decideur-it.fr/wp-content/uploads/2022/09/Septeo-vert-quadri300dpi-640w.png')
-        .setTimestamp();
+    getUserAvailabilities(userId, async (disponibilites) => {
+        const user = await client.users.fetch(userId);
+        const embed = new EmbedBuilder()
+            .setTitle('Résumé de vos disponibilités')
+            .setDescription('Voici un résumé de vos disponibilités que vous avez indiquées :')
+            .setColor(0xFFA500)
+            .setThumbnail('https://decideur-it.fr/wp-content/uploads/2022/09/Septeo-vert-quadri300dpi-640w.png')
+            .setTimestamp();
 
-    jours.forEach(jour => {
-        const disponibilite = disponibilites[jour];
-        const statut = disponibilite && disponibilite.disponible ? '✅ Disponible' : '❌ Non Disponible';
-        const commentaire = disponibilite && disponibilite.commentaire ? ` (${disponibilite.commentaire})` : '';
-        embed.addFields({ name: jour, value: `${statut}${commentaire}`, inline: false });
+        jours.forEach(jour => {
+            const disponibilite = disponibilites.find(d => d.jour === jour);
+            const statut = disponibilite && disponibilite.disponible ? '✅ ' : '❌ ';
+            const commentaire = disponibilite && disponibilite.commentaire ? ` (${disponibilite.commentaire})` : '';
+            embed.addFields({ name: jour, value: `${statut}${commentaire}`, inline: false });
+        });
+
+        user.send({ embeds: [embed] }).catch(console.error);
     });
-
-    user.send({ embeds: [embed] }).catch(console.error);
 }
 
-
 async function updateSummaryMessage() {
-    const channel = await client.channels.fetch(SUMMARY_CHANNEL_ID);
-    const embed = new EmbedBuilder()
-        .setTitle('Résumé des disponibilités')
-        .setColor(0xFFA500) // Couleur orange
-        .setDescription('Voici le résumé des disponibilités pour la semaine :')
-        .setThumbnail('https://decideur-it.fr/wp-content/uploads/2022/09/Septeo-vert-quadri300dpi-640w.png')
-        .setTimestamp();
+    getAvailabilities(async (availabilities) => {
+        const channel = await client.channels.fetch(SUMMARY_CHANNEL_ID);
+        const embed = new EmbedBuilder()
+            .setTitle('Résumé des disponibilités')
+            .setColor(0xFFA500)
+            .setDescription('Voici le résumé des disponibilités pour la semaine :')
+            .setThumbnail('https://decideur-it.fr/wp-content/uploads/2022/09/Septeo-vert-quadri300dpi-640w.png')
+            .setTimestamp();
 
-    jours.forEach(jour => {
-        const disponibilitesParJour = Object.values(planningResponses)
-            .map(({ username, disponibilites }) => {
-                if (disponibilites[jour]) {
-                    const disponibilite = disponibilites[jour];
-                    return `${username}: ${disponibilite.disponible ? '✅' : '❌'} ${disponibilite.commentaire || ''}`.trim();
-                }
-                return 'Aucune donnée';
-            })
-            .join('\n') || 'Aucune donnée';
+        jours.forEach(jour => {
+            const disponibilitesParJour = availabilities
+                .filter(({ jour: jourDb }) => jourDb === jour)
+                .map(({ username, disponible, commentaire }) => {
+                    return `${username}: ${disponible ? '✅ ' : '❌ '} ${commentaire || ''}`.trim();
+                })
+                .join('\n') || 'Aucune donnée';
 
             embed.addFields({ name: `__${jour}__`, value: disponibilitesParJour, inline: false });
         });
-    
+
         if (summaryMessageId) {
             try {
                 const message = await channel.messages.fetch(summaryMessageId);
                 await message.edit({ embeds: [embed] });
             } catch {
-                // Si le message ne peut pas être récupéré (peut-être a-t-il été supprimé), réinitialisez summaryMessageId
                 summaryMessageId = null;
             }
         }
-        
+
         if (!summaryMessageId) {
             const message = await channel.send({ embeds: [embed] });
             summaryMessageId = message.id;
             await fs.writeFile('summaryMessageId.json', JSON.stringify({ summaryMessageId }, null, 2));
         }
-    }
-    
+    });
+}    
     async function loadSummaryMessageId() {
         try {
             const data = await fs.readFile('summaryMessageId.json', 'utf8');
