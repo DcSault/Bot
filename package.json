@@ -1,12 +1,12 @@
 {
   "name": "bot",
   "version": "1.0.0",
-  "description": "Un bot Discord utilisant sqlite3 pour la gestion des données",
+  "description": "",
   "main": "bot.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node bot.js",
-    "postinstall": "npm rebuild sqlite3 --update-binary"
+    "postinstall": "npm start"
   },
   "author": "",
   "license": "ISC",
