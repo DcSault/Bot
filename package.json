@@ -5,8 +5,7 @@
   "main": "bot.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node bot.js",
-    "postinstall": "npm start"
+    "start": "node bot.js"
   },
   "author": "",
   "license": "ISC",
@@ -14,5 +13,11 @@
     "discord.js": "^14.14.1",
     "dotenv": "^16.4.5",
     "sqlite3": "^5.1.7"
-  }
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "private": true,
+  "postinstall": "npm start"
 }
