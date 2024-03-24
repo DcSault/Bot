@@ -1,17 +1,15 @@
 {
-  "name": "Bot",
+  "name": "bot",
   "version": "1.0.0",
-  "description": "Description de votre application",
+  "description": "",
   "main": "bot.js",
   "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node bot.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "postinstall": "npm start"
   },
-  "author": "NotSault",
+  "author": "",
   "license": "ISC",
-  "engines": {
-    "node": "14.x"
-  },
   "dependencies": {
     "discord.js": "^14.14.1",
     "dotenv": "^16.4.5",
