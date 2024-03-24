@@ -1,23 +1,20 @@
 {
-  "name": "bot",
+  "name": "Bot",
   "version": "1.0.0",
-  "description": "",
+  "description": "Description de votre application",
   "main": "bot.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node bot.js"
+    "start": "node bot.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
+  "author": "NotSault",
   "license": "ISC",
+  "engines": {
+    "node": "14.x"
+  },
   "dependencies": {
     "discord.js": "^14.14.1",
     "dotenv": "^16.4.5",
     "sqlite3": "^5.1.7"
-  },
-  "devDependencies": {},
-  "engines": {
-    "node": ">=14.0.0"
-  },
-  "private": true,
-  "postinstall": "npm start"
+  }
 }
