@@ -1,0 +1,17 @@
+{
+    "builds": [
+      {
+        "src": "package.json",
+        "use": "@vercel/node",
+        "config": {
+          "includeFiles": ["node_modules/sqlite3/lib/binding/**"]
+        }
+      }
+    ],
+    "functions": {
+      "api/**/*.js": {
+        "runtime": "nodejs16.x"
+      }
+    }
+  }
+  
