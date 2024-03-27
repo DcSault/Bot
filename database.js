@@ -91,4 +91,31 @@ function getUserAvailabilities(userId, callback) {
 }
 
 
-module.exports = { saveAvailability, getAvailabilities, getUserAvailabilities };
+// Supprimer la disponibilité d'un utilisateur pour un jour spécifique
+function deleteSpecificAvailability(userId, day, callback) {
+    const sql = `DELETE FROM disponibilites WHERE userId = ? AND jour = ?`;
+    db.run(sql, [userId, day], function(err) {
+        if (err) {
+            console.error("Erreur lors de la suppression de la disponibilité:", err.message);
+            return callback(err);
+        }
+        console.log(`Disponibilité supprimée pour ${userId} le ${day}.`);
+        callback(null);
+    });
+}
+
+// Supprimer toutes les disponibilités pour un utilisateur
+function deleteAllAvailabilities(userId, callback) {
+    const sql = `DELETE FROM disponibilites WHERE userId = ?`;
+    db.run(sql, [userId], function(err) {
+        if (err) {
+            console.error("Erreur lors de la suppression des disponibilités:", err.message);
+            return callback(err);
+        }
+        console.log(`Toutes les disponibilités supprimées pour ${userId}.`);
+        callback(null);
+    });
+}
+
+module.exports = { saveAvailability, getAvailabilities, getUserAvailabilities, deleteSpecificAvailability, deleteAllAvailabilities };
+

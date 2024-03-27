@@ -1,5 +1,5 @@
 require('dotenv').config();
-const { saveAvailability, getAvailabilities, getUserAvailabilities } = require('./database');
+const { saveAvailability, getAvailabilities, getUserAvailabilities, deleteAllAvailabilities, deleteSpecificAvailability  } = require('./database');
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const fs = require('fs').promises;
 
@@ -29,8 +29,36 @@ client.on('messageCreate', async message => {
         const user = message.mentions.users.first() || message.author;
         await collectAvailability(user);
     }
-    // La commande !modifier est désormais traitée via interactionCreate, le code correspondant est donc retiré d'ici.
+    else if (message.content.startsWith('!supprimer') && message.author.id === '314114260680572929') {
+        const parts = message.content.split(' ').filter(part => part);
+        if (parts.length < 3) {
+            return message.reply('Usage: !supprimer [ID utilisateur] [jour ou "tout"]');
+        }
+
+        const targetUserId = parts[1];
+        const dayOrAll = parts[2].toLowerCase(); // "tout" pour tout supprimer, sinon le jour spécifique
+
+        if (dayOrAll === "tout") {
+            deleteAllAvailabilities(targetUserId, async (err) => {
+                if (err) {
+                    return message.reply("Erreur lors de la suppression des disponibilités.");
+                }
+                message.reply("Toutes les disponibilités ont été supprimées avec succès pour l'utilisateur spécifié.");
+                await updateSummaryMessage(); // Mise à jour du message de résumé après suppression
+            });
+        } else {
+            deleteSpecificAvailability(targetUserId, dayOrAll, async (err) => {
+                if (err) {
+                    return message.reply(`Erreur lors de la suppression de la disponibilité pour ${dayOrAll}.`);
+                }
+                message.reply(`La disponibilité pour ${dayOrAll} a été supprimée avec succès pour l'utilisateur spécifié.`);
+                await updateSummaryMessage(); // Mise à jour du message de résumé après suppression
+            });
+        }
+    }
 });
+
+
 
 client.on('interactionCreate', async interaction => {
     if (!interaction.isCommand()) return;
