@@ -20,7 +20,7 @@ const jours = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dim
 const planningResponses = {}; // Structure pour les réponses
 
 client.once('ready', async () => {
-    console.log('Le bot est prêt!');
+    console.log('Le bot est prêt! Petit pd de QDD');
     await loadSummaryMessageId();
 });
 
